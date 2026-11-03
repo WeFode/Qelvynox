@@ -271,10 +271,17 @@ node dev/package.mjs    # -> qelvynox-<version>.zip (no dev/, tests/, docs/, scr
 ```
 
 Then upload that zip in the Chrome Web Store dashboard, fill both item languages from
-the doc, and keep the privacy-policy URL public (`docs/privacy.md`).
+the doc, and keep the privacy-policy URL public. The store wants a page that loads
+without a login, so publish `docs/privacy.md` through GitHub Pages
+(`https://<user>.github.io/Qelvynox/...`) rather than pasting a `blob` or
+`raw.githubusercontent.com` link.
 
 ---
 
 ## License
 
 [MIT](LICENSE) — free for personal and commercial use.
+
+Copyright (c) 2026 WeFode (Qelvynox) and contributors.
+Qelvynox is an independent, unofficial tool and is not affiliated with or endorsed by
+OpenAI.

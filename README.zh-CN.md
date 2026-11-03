@@ -197,7 +197,7 @@ git push -u gitee  main      # 同步镜像
 2. 本地跑 `node tests/run.mjs`（必须全绿）与 `node dev/package.mjs`，得到 `qelvynox-<version>.zip`（不含 `dev/`、`tests/`、`docs/`、`screenshots/` 与海报）。
 3. 后台「添加新条目」上传 zip；按文档填写默认条目语言 `zh-CN` 与第二语言 `en` 的名称、摘要、详情、单一用途与权限理由。
 4. 上传 8 张 1280×800 截图与 440×280 宣传图；仓库里的 `assets/qelvynox-poster.jpg`（由根目录 `Qelvynox宣传海报.png` 压缩而来）只用于 README，上面仍写着已移除的文件夹功能与旧版本号，不能直接作为商店素材。
-5. 挂出一个公开可访问的隐私政策 URL（`docs/privacy.md`，已含中英双语），根据扩展实际处理的数据填写数据使用声明，不要全部选「不收集」。
+5. 挂出一个公开可访问的隐私政策 URL（`docs/privacy.md`，已含中英双语；商店要求无需登录就能打开，请优先用 GitHub Pages 的页面地址，不要填 `blob` 或 `raw.githubusercontent.com` 链接），根据扩展实际处理的数据填写数据使用声明，不要全部选「不收集」。
 6. 分类 Productivity、受众全部人群、自评无广告/内购/赌博/挖矿；核对清单后提交审核。
 
 ---
@@ -205,3 +205,6 @@ git push -u gitee  main      # 同步镜像
 ## 许可
 
 [MIT](LICENSE) — 个人与商业用途均免费。
+
+Copyright (c) 2026 WeFode (Qelvynox) 及贡献者。
+Qelvynox 是独立的非官方工具，与 OpenAI 无隶属或认可关系。
