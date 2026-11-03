@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- The real title is set by applyTo() from the dictionary, so it never
+       paints in the wrong language. -->
+  <title>Qelvynox</title>
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+
+  <div class="app-container" id="mainView">
+
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-wrapper">
+          <img src="../../icons/icon128.png" class="brand-logo" alt="Qelvynox" />
+        </div>
+        <div class="brand-info">
+          <div class="brand-title-row">
+            <h1 class="brand-title">Qelvynox</h1>
+            <span class="version-tag" id="headerVersion">v1.0.0</span>
+          </div>
+          <p class="brand-subtitle" data-i18n="app.brandSubtitle">导出、搜索、整理，让 ChatGPT 更快</p>
+        </div>
+      </div>
+    </header>
+
+    <main class="app-content">
+
+      <!-- Interface language: applies at once and reaches every open ChatGPT tab -->
+      <div class="lang-row">
+        <span class="lang-label" data-i18n="popup.langLabel">界面语言</span>
+        <div class="lang-seg" role="group" data-i18n-aria="popup.langLabel" aria-label="界面语言">
+          <button type="button" class="lang-opt" id="langZh" aria-pressed="true" data-lang="zh-CN">中文</button>
+          <button type="button" class="lang-opt" id="langEn" aria-pressed="false" data-lang="en">English</button>
+        </div>
+      </div>
+
+      <!-- Quick launcher: the full control panel lives in the in-page modal -->
+      <button type="button" class="btn btn-primary open-settings-btn" id="openSettingsBtn">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"></circle>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+        </svg>
+        <span data-i18n="popup.openSettings">打开设置面板</span>
+      </button>
+      <p class="launcher-hint" id="launcherHint" data-i18n="popup.launcherHint">设置面板会在 ChatGPT 页面中打开，所有功能开关都在那里管理。</p>
+
+      <!-- Speed booster quick card -->
+      <section class="card booster-card">
+        <div class="card-header">
+          <div class="card-title-group">
+            <div class="icon-avatar speed-avatar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title" data-i18n="popup.speedTitle">对话加速</h2>
+              <p class="card-subtitle" data-i18n="popup.speedDesc">减少长对话中的页面卡顿</p>
+            </div>
+          </div>
+          <label class="custom-switch">
+            <input type="checkbox" aria-label="对话加速" data-i18n-aria="popup.speedTitle" id="toggleEnabled" checked />
+            <span class="switch-slider"></span>
+          </label>
+        </div>
+
+        <div class="limit-controller" id="trimmerDetails">
+          <div class="limit-labels">
+            <span class="limit-primary-label" data-i18n="popup.turnsLabel">显示轮次</span>
+            <span class="limit-secondary-label" data-i18n="popup.turnsHint">初始显示数量（建议 2–15 轮）</span>
+          </div>
+          <div class="stepper-widget">
+            <button class="step-btn" id="msgLimitDec" title="减少显示轮次" data-i18n-title="popup.turnsLess">−</button>
+            <input type="number" id="messageLimit" aria-label="显示轮次" data-i18n-aria="popup.turnsLabel" class="step-input" min="1" max="100" value="15" />
+            <button class="step-btn" id="msgLimitInc" title="增加显示轮次" data-i18n-title="popup.turnsMore">+</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Quick tool toggles -->
+      <section class="card tools-card">
+        <div class="card-header mini-header">
+          <div class="card-title-group">
+            <div class="icon-avatar tools-avatar">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title" data-i18n="popup.quickTitle">快捷开关</h2>
+              <p class="card-subtitle" data-i18n="popup.quickDesc">更多选项请在设置面板中调整</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="tools-toggle-list">
+          <div class="tool-toggle-row">
+            <div class="tool-info">
+              <span class="tool-name" data-i18n="popup.toolAuto">上滑自动加载</span>
+              <span class="tool-desc" data-i18n="popup.toolAutoDesc">向上滚动时加载较早的内容</span>
+            </div>
+            <label class="custom-switch micro-switch">
+              <input type="checkbox" aria-label="上滑自动加载" data-i18n-aria="popup.toolAuto" id="toggleAutoScrollLoad" checked />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="tool-toggle-row">
+            <div class="tool-info">
+              <span class="tool-name" data-i18n="popup.toolPill">显示加载按钮</span>
+              <span class="tool-desc" data-i18n="popup.toolPillDesc">通过悬浮按钮加载较早的内容</span>
+            </div>
+            <label class="custom-switch micro-switch">
+              <input type="checkbox" aria-label="显示加载按钮" data-i18n-aria="popup.toolPill" id="toggleFloatingButton" checked />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="tool-toggle-row">
+            <div class="tool-info">
+              <span class="tool-name" data-i18n="popup.toolOutline">对话目录</span>
+              <span class="tool-desc" data-i18n="popup.toolOutlineDesc">通过问题列表快速导航</span>
+            </div>
+            <label class="custom-switch micro-switch">
+              <input type="checkbox" aria-label="对话目录" data-i18n-aria="popup.toolOutline" id="toggleOutline" checked />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="tool-toggle-row">
+            <div class="tool-info">
+              <span class="tool-name" data-i18n="popup.toolSearch">搜索与收藏</span>
+              <span class="tool-desc" data-i18n="popup.toolSearchDesc">按 Alt+F 搜索，或收藏回复</span>
+            </div>
+            <label class="custom-switch micro-switch">
+              <input type="checkbox" aria-label="搜索与收藏" data-i18n-aria="popup.toolSearch" id="toggleSearch" checked />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+
+          <div class="tool-toggle-row">
+            <div class="tool-info">
+              <span class="tool-name" data-i18n="popup.toolArchive">本地归档</span>
+              <span class="tool-desc" data-i18n="popup.toolArchiveDesc">在本机保存对话和图片，方便导出</span>
+            </div>
+            <label class="custom-switch micro-switch">
+              <input type="checkbox" aria-label="本地归档" data-i18n-aria="popup.toolArchive" id="toggleLocalArchive" checked />
+              <span class="switch-slider"></span>
+            </label>
+          </div>
+        </div>
+      </section>
+
+      <!-- Export & backup shortcuts -->
+      <section class="card export-card">
+        <div class="card-header mini-header">
+          <div class="card-title-group">
+            <div class="icon-avatar export-avatar">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                <polyline points="7 10 12 15 17 10"></polyline>
+                <line x1="12" y1="15" x2="12" y2="3"></line>
+              </svg>
+            </div>
+            <div>
+              <h2 class="card-title" data-i18n="popup.exportTitle">导出与备份</h2>
+              <p class="card-subtitle" data-i18n="popup.exportDesc">Word、PDF、Markdown、TXT、JSON</p>
+            </div>
+          </div>
+        </div>
+        <div class="export-actions-row">
+          <button class="btn btn-secondary" id="exportCurrentBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+            </svg>
+            <span data-i18n="popup.exportPickBtn">选择消息并导出</span>
+          </button>
+          <button class="btn btn-secondary" id="exportBackupBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+              <polyline points="17 21 17 13 7 13 7 21"></polyline>
+              <polyline points="7 3 7 8 15 8"></polyline>
+            </svg>
+            <span data-i18n="popup.backupExportBtn">导出备份</span>
+          </button>
+          <button class="btn btn-secondary" id="importBackupBtn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span data-i18n="popup.backupImportBtn">导入备份</span>
+          </button>
+          <input type="file" id="importBackupFileInput" accept=".json,application/json" style="display:none;" />
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2"></rect>
+          <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg>
+        <span data-i18n="popup.footer">仅在本机运行，你的对话不会离开这台设备。没有账号，没有遥测，没有付费版。</span>
+      </footer>
+
+      <!-- Save banner for the pending quick changes -->
+      <div class="save-bar-container hidden" id="saveBar">
+        <button id="refreshBtn" class="btn btn-save">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+          <span data-i18n="popup.saveBtn">保存并应用</span>
+        </button>
+      </div>
+
+    </main>
+
+  </div>
+
+  <script src="../shared/i18n.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

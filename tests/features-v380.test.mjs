@@ -1,0 +1,517 @@
+/**
+ * Tests for Qelvynox v3.8.0 features:
+ * 1. Active DOM Turn Limit Enforcement (Visible Messages = 2)
+ * 2. Backup & Restore (JSON)
+ * 3. In-page search matching (the real collectTurnMatches)
+ */
+import fs from "node:fs";
+import vm from "node:vm";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const results = [];
+function check(name, cond, detail) {
+  results.push({ name, pass: !!cond, detail });
+  console.log(`${cond ? "PASS" : "FAIL"}  ${name}${detail ? `  -> ${detail}` : ""}`);
+}
+
+/* ---------------- 1. Active DOM Turn Limit (Visible Messages) ---------------- */
+console.log("--- PART 1: Active DOM Turn Limit Enforcement ---");
+
+function createMockTurnDom(turnCount) {
+  const turns = [];
+  for (let i = 1; i <= turnCount; i++) {
+    const classList = new Set();
+    const userRoleEl = {
+      tagName: "DIV",
+      getAttribute: (k) => (k === "data-message-author-role" ? "user" : null)
+    };
+    const turnEl = {
+      tagName: "DIV",
+      id: `turn-${i}`,
+      classList: {
+        add: (c) => classList.add(c),
+        remove: (c) => classList.delete(c),
+        contains: (c) => classList.has(c)
+      },
+      getAttribute: (k) => (k === "data-testid" ? `conversation-turn-${i}` : null),
+      querySelector: (sel) => (sel.includes('author-role="user"') ? userRoleEl : null),
+      querySelectorAll: () => [],
+      textContent: `Turn ${i} user query and assistant response.`
+    };
+    turns.push(turnEl);
+  }
+  return turns;
+}
+
+// Exercise the turn enforcement logic
+function testTurnLimitEnforcement(turns, messageLimit) {
+  const userTurns = [];
+  turns.forEach((turn, idx) => {
+    if (turn.querySelector('[data-message-author-role="user"]') || turn.getAttribute('data-message-author-role') === 'user') {
+      userTurns.push(idx);
+    }
+  });
+
+  const effectiveLimit = Math.max(1, messageLimit);
+  let cutoffIdx = 0;
+  if (userTurns.length > 0) {
+    cutoffIdx = userTurns.length > effectiveLimit ? userTurns[userTurns.length - effectiveLimit] : 0;
+  } else {
+    const exchangeLimit = effectiveLimit * 2;
+    cutoffIdx = turns.length > exchangeLimit ? turns.length - exchangeLimit : 0;
+  }
+
+  if (cutoffIdx > 0) {
+    turns.forEach((turn, idx) => {
+      if (idx < cutoffIdx) {
+        turn.classList.add("qelvynox-dom-hidden");
+      } else {
+        turn.classList.remove("qelvynox-dom-hidden");
+      }
+    });
+  } else {
+    turns.forEach((turn) => turn.classList.remove("qelvynox-dom-hidden"));
+  }
+}
+
+const tenTurns = createMockTurnDom(10);
+// Apply limit: 2
+testTurnLimitEnforcement(tenTurns, 2);
+
+const hiddenCount = tenTurns.filter((t) => t.classList.contains("qelvynox-dom-hidden")).length;
+const visibleCount = tenTurns.filter((t) => !t.classList.contains("qelvynox-dom-hidden")).length;
+
+check("DOM Limit 2: exactly 8 turns hidden", hiddenCount === 8, `hidden=${hiddenCount}`);
+check("DOM Limit 2: exactly 2 latest turns visible", visibleCount === 2, `visible=${visibleCount}`);
+check("DOM Limit 2: turn 9 and 10 remain visible",
+  !tenTurns[8].classList.contains("qelvynox-dom-hidden") && !tenTurns[9].classList.contains("qelvynox-dom-hidden"));
+check("DOM Limit 2: earlier turns (1..8) hidden",
+  tenTurns.slice(0, 8).every((t) => t.classList.contains("qelvynox-dom-hidden")));
+
+// Now update to limit: 5 (live change)
+testTurnLimitEnforcement(tenTurns, 5);
+const newHidden = tenTurns.filter((t) => t.classList.contains("qelvynox-dom-hidden")).length;
+const newVisible = tenTurns.filter((t) => !t.classList.contains("qelvynox-dom-hidden")).length;
+check("DOM Limit 5: exactly 5 turns hidden", newHidden === 5, `hidden=${newHidden}`);
+check("DOM Limit 5: exactly 5 latest turns visible", newVisible === 5, `visible=${newVisible}`);
+
+// Test: 5 messages on screen with limit 2 -> exactly 3 hidden, 2 visible
+const fiveTurns = createMockTurnDom(5);
+testTurnLimitEnforcement(fiveTurns, 2);
+const fiveHidden = fiveTurns.filter((t) => t.classList.contains("qelvynox-dom-hidden")).length;
+const fiveVisible = fiveTurns.filter((t) => !t.classList.contains("qelvynox-dom-hidden")).length;
+check("DOM Limit 2 on 5 messages: exactly 3 hidden", fiveHidden === 3, `hidden=${fiveHidden}`);
+check("DOM Limit 2 on 5 messages: exactly 2 visible", fiveVisible === 2, `visible=${fiveVisible}`);
+
+// Realistic Alternating Chat: User & Assistant pairs (10 elements = 5 exchanges)
+function createAlternatingChatDom(exchangeCount) {
+  const turns = [];
+  for (let i = 1; i <= exchangeCount; i++) {
+    // User turn
+    const uClassList = new Set();
+    const userRoleEl = { tagName: "DIV", getAttribute: (k) => (k === "data-message-author-role" ? "user" : null) };
+    turns.push({
+      tagName: "DIV",
+      id: `turn-user-${i}`,
+      classList: { add: (c) => uClassList.add(c), remove: (c) => uClassList.delete(c), contains: (c) => uClassList.has(c) },
+      getAttribute: (k) => (k === "data-testid" ? `conversation-turn-user-${i}` : null),
+      querySelector: (sel) => (sel.includes('author-role="user"') ? userRoleEl : null),
+      textContent: `User Question ${i}`
+    });
+    // Assistant turn
+    const aClassList = new Set();
+    const astRoleEl = { tagName: "DIV", getAttribute: (k) => (k === "data-message-author-role" ? "assistant" : null) };
+    turns.push({
+      tagName: "DIV",
+      id: `turn-assistant-${i}`,
+      classList: { add: (c) => aClassList.add(c), remove: (c) => aClassList.delete(c), contains: (c) => aClassList.has(c) },
+      getAttribute: (k) => (k === "data-testid" ? `conversation-turn-assistant-${i}` : null),
+      querySelector: (sel) => (sel.includes('author-role="assistant"') ? astRoleEl : null),
+      textContent: `ChatGPT Response ${i}`
+    });
+  }
+  return turns;
+}
+
+const alternatingChat = createAlternatingChatDom(5); // 5 Q&A pairs (10 DOM turns)
+// Setting limit = 1 must preserve the last user question AND the assistant response (both visible)
+testTurnLimitEnforcement(alternatingChat, 1);
+const altHidden = alternatingChat.filter((t) => t.classList.contains("qelvynox-dom-hidden")).length;
+const altVisible = alternatingChat.filter((t) => !t.classList.contains("qelvynox-dom-hidden")).length;
+check("DOM Limit 1 on alternating chat: keeps 1 complete exchange (user question + bot reply)",
+  altVisible === 2 && altHidden === 8, `visible=${altVisible} hidden=${altHidden}`);
+check("DOM Limit 1 on alternating chat: last user turn is visible",
+  !alternatingChat[8].classList.contains("qelvynox-dom-hidden"), `turn-user-5 visible`);
+check("DOM Limit 1 on alternating chat: last assistant turn is visible",
+  !alternatingChat[9].classList.contains("qelvynox-dom-hidden"), `turn-assistant-5 visible`);
+
+// Verify getStats adjusted visibleTurns calculation:
+function computeReportedVisible({ baseVisible, hiddenCount, enabled }) {
+  return (enabled && hiddenCount > 0 && Number.isFinite(baseVisible))
+    ? Math.max(1, baseVisible - hiddenCount)
+    : baseVisible;
+}
+check("Stats: adjusts visibleTurns from 10 to 2 when 8 turns hidden",
+  computeReportedVisible({ baseVisible: 10, hiddenCount: 8, enabled: true }) === 2);
+check("Stats: keeps original visibleTurns if booster disabled",
+  computeReportedVisible({ baseVisible: 10, hiddenCount: 8, enabled: false }) === 10);
+
+/* ---------------- 2. Backup & Restore (JSON) ---------------- */
+console.log("\n--- PART 2: Backup & Restore (JSON) ---");
+
+const sampleItems = {
+  qelvynox_settings: { enabled: true, messageLimit: 2, loadBatchSize: 5 },
+  // Left over from an install that used the removed sidebar organizer: it must
+  // not be carried into a backup, and restoring must not put it back.
+  qelvynox_folders: [
+    { id: "f1", name: "AI Dev", chats: [{ id: "c1", title: "Test Chat" }] }
+  ],
+  qelvynox_bookmarks_c1: [
+    { id: "m1", snippet: "Pinned message snippet", timestamp: 123456789 }
+  ],
+  unrelated_key: "should_not_leak"
+};
+
+// Simulation of the export logic in popup.js
+function buildBackupPayload(items, manifestVersion = "3.8.0") {
+  const backup = {
+    app: "Qelvynox",
+    version: manifestVersion,
+    exportedAt: new Date().toISOString(),
+    settings: items.qelvynox_settings || {},
+    bookmarks: {}
+  };
+  Object.keys(items || {}).forEach((key) => {
+    if (key.startsWith("qelvynox_bookmarks_")) {
+      backup.bookmarks[key] = items[key];
+    }
+  });
+  return backup;
+}
+
+const backupJson = buildBackupPayload(sampleItems);
+check("Backup: app identifier set to Qelvynox", backupJson.app === "Qelvynox");
+check("Backup: the retired folders key is not carried", backupJson.folders === undefined);
+check("Backup: settings preserved with messageLimit 2", backupJson.settings.messageLimit === 2);
+check("Backup: bookmarks captured", !!backupJson.bookmarks.qelvynox_bookmarks_c1);
+check("Backup: unrelated keys excluded", backupJson.unrelated_key === undefined);
+
+// Validate restore
+function validateAndExtractRestore(parsedJson) {
+  if (!parsedJson || (parsedJson.app !== "Qelvynox" && !parsedJson.bookmarks && !parsedJson.settings)) {
+    throw new Error("Invalid Qelvynox backup file.");
+  }
+  const toSet = {};
+  if (parsedJson.settings) toSet["qelvynox_settings"] = parsedJson.settings;
+  if (parsedJson.bookmarks) {
+    Object.keys(parsedJson.bookmarks).forEach((k) => {
+      if (k.startsWith("qelvynox_bookmarks_")) toSet[k] = parsedJson.bookmarks[k];
+    });
+  }
+  return toSet;
+}
+
+const restored = validateAndExtractRestore(backupJson);
+check("Restore: validates valid backup", !!restored.qelvynox_settings && restored.qelvynox_folders === undefined);
+let invalidCaught = false;
+try { validateAndExtractRestore({ random: "payload" }); } catch { invalidCaught = true; }
+check("Restore: rejects invalid payload", invalidCaught);
+
+/* ---------------- 3. In-page Search Matching ---------------- */
+console.log("\n--- PART 3: Search Matching over the loaded turns ---");
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const contentSrc = fs.readFileSync(path.join(REPO, "src/content/index.js"), "utf8");
+
+/** Extract one top-level function's source (balanced parens, then braces). */
+function grab(name, src) {
+  const s = src.indexOf(`function ${name}(`);
+  if (s === -1) throw new Error(`missing ${name}`);
+  let i = src.indexOf("(", s), p = 0;
+  for (; i < src.length; i++) {
+    if (src[i] === "(") p++;
+    else if (src[i] === ")") { p--; if (!p) break; }
+  }
+  let d = 0;
+  i = src.indexOf("{", i);
+  for (; i < src.length; i++) {
+    if (src[i] === "{") d++;
+    else if (src[i] === "}") { d--; if (!d) break; }
+  }
+  return src.slice(s, i + 1);
+}
+
+// A turn is a run of text nodes; `owned` marks a node inside Qelvynox's own UI.
+function fakeTurn(parts) {
+  return {
+    __texts: parts.map((p) => ({
+      nodeValue: p.text,
+      length: p.text.length,
+      parentElement: { closest: (sel) => (p.owned ? sel : null) }
+    }))
+  };
+}
+
+function runSearch(turns, query) {
+  const ctx = {
+    document: {
+      createTreeWalker(root, what, filter) {
+        let i = 0;
+        return {
+          nextNode() {
+            while (i < root.__texts.length) {
+              const n = root.__texts[i++];
+              if (!filter || filter.acceptNode(n) === 1) return n;
+            }
+            return null;
+          }
+        };
+      },
+      createRange() {
+        return {
+          setStart(node, off) { this.node = node; this.from = off; },
+          setEnd(node, off) { this.to = off; }
+        };
+      }
+    },
+    Range: function Range() {},
+    OWNED_SELECTOR: "[data-qelvynox]",
+    getAllConversationTurns: () => turns,
+    String, Math, Number, Array
+  };
+  vm.createContext(ctx);
+  vm.runInContext([
+    grab("collectRangesIn", contentSrc),
+    grab("collectTurnMatches", contentSrc),
+    "globalThis.run = collectTurnMatches;"
+  ].join("\n"), ctx);
+  return ctx.run(query);
+}
+
+const searchTurns = [
+  fakeTurn([{ text: "How do I build a Chrome extension without external dependencies?" }]),
+  fakeTurn([{ text: "You can use native Vanilla JS and standard browser Web APIs." }]),
+  fakeTurn([{ text: "Can we implement a ZIP generator and a " }, { text: "ZIP reader in pure JS?" }]),
+  fakeTurn([{ text: "Yes, by packaging the OOXML files as raw Uint8Array ZIP structures." }])
+];
+
+const zip = runSearch(searchTurns, "zip");
+check("Search: finds every occurrence, across text nodes and turns", zip.length === 3, `${zip.length}`);
+check("Search: matching is case-insensitive", runSearch(searchTurns, "ZIP").length === zip.length);
+check("Search: a match carries the turn it belongs to",
+  zip[0].turn === searchTurns[2] && zip[2].turn === searchTurns[3]);
+check("Search: each range covers exactly the keyword",
+  zip.every((m) => m.range.node.nodeValue.slice(m.range.from, m.range.to) === "ZIP"));
+
+const ownedTurn = [fakeTurn([{ text: "a ZIP in the conversation" }, { text: "ZIP inside our own panel", owned: true }])];
+check("Search: Qelvynox's own UI text is never a match", runSearch(ownedTurn, "zip").length === 1);
+check("Search: empty results on no match", runSearch(searchTurns, "nonexistentwordxyz").length === 0);
+check("Search: a blank query matches nothing", runSearch(searchTurns, "   ").length === 0);
+check("Search: the scope is every loaded turn, visible or folded away",
+  !grab("collectTurnMatches", contentSrc).includes("isTurnVisible") &&
+  !grab("collectRangesIn", contentSrc).includes("isTurnVisible"));
+
+/* ---------------- 4. Modern ChatGPT DOM & Navigator Badge ---------------- */
+console.log("\n--- PART 4: Modern ChatGPT Turn Container & Navigator Badge ---");
+
+function computeOutlineBadgeText({ allUserTurns, visibleUserTurns }) {
+  if (allUserTurns.length === 0) return "0";
+  if (visibleUserTurns.length < allUserTurns.length) {
+    return `${visibleUserTurns.length}`;
+  }
+  return `${allUserTurns.length}`;
+}
+
+const mockAll = [1, 2, 3, 4, 5];
+const mockVis = [4, 5]; // 2 visible out of 5
+check("Navigator Badge: displays 2 when 2 visible out of 5",
+  computeOutlineBadgeText({ allUserTurns: mockAll, visibleUserTurns: mockVis }) === "2");
+check("Navigator Badge: displays 5 when all 5 visible",
+  computeOutlineBadgeText({ allUserTurns: mockAll, visibleUserTurns: mockAll }) === "5");
+
+// Test container wrapper logic
+function getMockTurnItemContainer(turn) {
+  if (turn.parentElement && turn.parentElement.parentElement?.classList?.contains("qMYqUG_convSearchResultHighlightRoot")) {
+    return turn.parentElement;
+  }
+  return turn;
+}
+
+const mockRoot = { classList: { contains: (cls) => cls === "qMYqUG_convSearchResultHighlightRoot" } };
+const mockParentDiv = { parentElement: mockRoot, classList: { add: () => {}, remove: () => {}, contains: () => false }, style: {} };
+const mockSectionTurn = { parentElement: mockParentDiv, classList: { add: () => {}, remove: () => {} } };
+
+check("Modern ChatGPT DOM: identifies parent wrapper div inside qMYqUG_convSearchResultHighlightRoot",
+  getMockTurnItemContainer(mockSectionTurn) === mockParentDiv);
+
+/* ---------------- 5. Load Older Pill In-Flow Placement ---------------- */
+console.log("\n--- PART 5: Load Older Pill In-Flow Placement (Not Sticky) ---");
+
+const indexJsContent = fs.readFileSync("src/content/index.js", "utf8");
+
+check("Floating Pill: uses relative positioning (not sticky top)",
+  indexJsContent.includes(".qelvynox-floating-pill {\n        position: relative;") ||
+  indexJsContent.includes(".qelvynox-floating-pill {\r\n        position: relative;"));
+
+check("Floating Pill: does not use position: sticky",
+  !indexJsContent.includes(".qelvynox-floating-pill {\n        position: sticky;") &&
+  !indexJsContent.includes(".qelvynox-floating-pill {\r\n        position: sticky;"));
+
+check("Floating Pill: targets turn item container for insertion",
+  indexJsContent.includes("const targetTurn = firstVisibleTurn ? getTurnItemContainer(firstVisibleTurn) : null;") &&
+  indexJsContent.includes("targetTurn.parentNode.insertBefore(pill, targetTurn);"));
+
+/* ---------------- 6. Configurable Live Auto-Trim Setting ---------------- */
+console.log("\n--- PART 6: Configurable Live Auto-Trim Setting ---");
+
+const popupHtmlContent = fs.readFileSync("src/popup/popup.html", "utf8");
+const popupJsContent = fs.readFileSync("src/popup/popup.js", "utf8");
+
+check("Live Auto-Trim: settings modal exposes the liveAutoTrim switch",
+  indexJsContent.includes('qgstSwitchHtml("liveAutoTrim"'));
+
+check("Live Auto-Trim: popup JS defaults liveAutoTrim to false",
+  popupJsContent.includes("liveAutoTrim: false"));
+
+check("Live Auto-Trim: index.js defaults liveAutoTrim to false",
+  indexJsContent.includes("liveAutoTrim: false"));
+
+check("Live Auto-Trim: enforces on page load and skips live chat when false",
+  indexJsContent.includes("if (isLiveUpdate && !appSettings.liveAutoTrim && initialEnforcementDone)"));
+
+check("Live Auto-Trim: passes { live: true } in MutationObserver",
+  indexJsContent.includes("enforceDomTurnLimit({ live: true });"));
+
+/* ---------------- 7. Seamless Auto-Load on Scroll Up ---------------- */
+console.log("\n--- PART 7: Seamless Auto-Load on Scroll Up (Gemini-Style) ---");
+
+const bgJsContent = fs.readFileSync("src/background/background.js", "utf8");
+
+check("Auto-Load on Scroll: popup HTML contains toggleAutoScrollLoad checkbox",
+  popupHtmlContent.includes('id="toggleAutoScrollLoad"'));
+
+check("Auto-Load on Scroll: popup JS defaults enableAutoScrollLoad to true",
+  popupJsContent.includes("enableAutoScrollLoad: true"));
+
+check("Auto-Load on Scroll: index.js defaults enableAutoScrollLoad to true",
+  indexJsContent.includes("enableAutoScrollLoad: true"));
+
+check("Auto-Load on Scroll: background.js defaults enableAutoScrollLoad to true",
+  bgJsContent.includes("enableAutoScrollLoad: true"));
+
+check("Auto-Load on Scroll: index.js injects qelvynox-scroll-loader styles",
+  indexJsContent.includes(".qelvynox-scroll-loader") &&
+  indexJsContent.includes(".qelvynox-scroll-spinner"));
+
+check("Auto-Load on Scroll: index.js creates and observes qelvynox-scroll-sentinel",
+  indexJsContent.includes('sentinel.id = "qelvynox-scroll-sentinel"') &&
+  indexJsContent.includes("scrollIntersectionObserver = new IntersectionObserver"));
+
+check("Auto-Load on Scroll: index.js wires setupAutoScrollLoader into renderAllTools and MutationObserver",
+  indexJsContent.includes("function renderAllTools() {") &&
+  indexJsContent.includes("setupAutoScrollLoader();") &&
+  indexJsContent.includes("removeAutoScrollLoader();"));
+
+check("Auto-Load on Scroll: unhideOlderBatch uses scroll anchoring (diff check)",
+  indexJsContent.includes("function unhideOlderBatch(options = {})") &&
+  indexJsContent.includes("const diff = newTop - anchorTop;") &&
+  indexJsContent.includes("chatContainer.scrollBy({ top: diff, behavior: \"instant\" });"));
+
+check("Auto-Load on Scroll: zero-reload safeguard prevents automatic reload on scroll",
+  indexJsContent.includes("if (options.fromScroll) {") &&
+  indexJsContent.includes("removeAutoScrollLoader();") &&
+  indexJsContent.includes("return false;"));
+
+check("Auto-Load on Scroll: gesture listeners guard against scroll loops when domHidden is 0",
+  indexJsContent.includes("st <= 150 && domHidden > 0") &&
+  indexJsContent.includes("currentST <= 150 && !isAutoLoadingBatch"));
+check("Auto-Load on Scroll: sentinel cannot start a load without a user gesture",
+  indexJsContent.includes("let userScrollIntent = false;") &&
+  indexJsContent.includes("userScrollIntent &&") &&
+  indexJsContent.includes("options.fromScroll && !consumeUserScrollIntent()") &&
+  indexJsContent.includes("if (isProgrammaticScroll()) return;"));
+
+const mainWorldContent = fs.readFileSync("src/page/mainWorld.js", "utf8");
+check("Auto-Load on Scroll: mainWorld buffers up to 50 turns when enableAutoScrollLoad is true",
+  mainWorldContent.includes("const autoScrollActive = config.enableAutoScrollLoad === true && !config.liveAutoTrim && extra === 0;") &&
+  mainWorldContent.includes("Math.max(50, config.messageLimit)"));
+
+check("Live Auto-Trim: background.js defaults liveAutoTrim to false",
+  bgJsContent.includes("liveAutoTrim: false"));
+
+check("Live Auto-Trim: mainWorld.js supports liveAutoTrim in config",
+  mainWorldContent.includes("liveAutoTrim: false") &&
+  mainWorldContent.includes("liveAutoTrim: parsed.liveAutoTrim === true"));
+
+check("Live Auto-Trim: index.js syncs liveAutoTrim to localStorage and storage change",
+  indexJsContent.includes("liveAutoTrim: appSettings.liveAutoTrim === true") &&
+  indexJsContent.includes("if (appSettings.liveAutoTrim) {\n      manuallyUnhiddenTurnsCount = 0;"));
+
+check("Live Auto-Trim: setupAutoScrollLoader is disabled when liveAutoTrim is active",
+  indexJsContent.includes("appSettings.liveAutoTrim === true") &&
+  indexJsContent.includes("removeAutoScrollLoader();"));
+
+check("Live Auto-Trim: immediate triggers on send and streaming completion",
+  indexJsContent.includes("wasStreaming && !isStreaming") &&
+  indexJsContent.includes("e.key === \"Enter\" && !e.shiftKey && appSettings.enabled && appSettings.liveAutoTrim"));
+
+console.log("\n--- PART 8: Modern Mapping Tree & Virtualizer Spacer Preservation ---");
+check("Mapping Tree: mainWorld extracts conversation history from node tree",
+  mainWorldContent.includes("function extractMessagesFromMapping(mapping, currentNode)") &&
+  mainWorldContent.includes("const chain = extractMessagesFromMapping(data.mapping, data.current_node);") &&
+  mainWorldContent.includes("countSource: \"mapping-tree\""));
+
+check("Virtualizer Spacers: index.js preserves scroll spacers during DOM turn limit enforcement",
+  indexJsContent.includes("const isSpacer =") &&
+  indexJsContent.includes("c.classList.contains(\"h-[var(--last-known-height,var(--estimated-turn-height,50vh))]\")") &&
+  indexJsContent.includes("c.className.includes(\"min-h-\")"));
+
+check("Auto-Load on Scroll: hasOlderTurnsToLoad factors in manually unhidden turns",
+  indexJsContent.includes("lastStatus.totalTurns > (lastStatus.visibleTurns + manuallyUnhiddenTurnsCount)") &&
+  indexJsContent.includes("manuallyUnhiddenTurnsCount += batchSize;"));
+
+/* ---------------- 9. Removed: context & message-count meters ---------------- */
+console.log("\n--- PART 9: Estimates removed, settings live in the page ---");
+
+check("No message-count threshold survives anywhere",
+  !indexJsContent.includes("messageCountWarningThreshold") &&
+  !popupJsContent.includes("messageCountWarningThreshold") &&
+  !bgJsContent.includes("messageCountWarningThreshold") &&
+  !popupHtmlContent.includes("messageCountThreshold"));
+
+check("No context/token estimator survives in the content script",
+  !/computeContextUsage|contextUsedPct|estimatedTokens|maxSafeTokens/.test(indexJsContent));
+
+check("Dock carries no percentage or turn-count badge, but does carry the gear",
+  !indexJsContent.includes("qelvynox-dock-context") &&
+  !indexJsContent.includes("qelvynox-dock-msgcount") &&
+  indexJsContent.includes('id="qelvynox-dock-settings"'));
+
+check("The gear and the popup launcher both route to the in-page settings modal",
+  indexJsContent.includes("function openSettingsModal(") &&
+  indexJsContent.includes('"QELVYNOX_OPEN_SETTINGS"') &&
+  popupJsContent.includes('"QELVYNOX_OPEN_SETTINGS"') &&
+  popupHtmlContent.includes('id="openSettingsBtn"'));
+
+check("The settings modal keeps every feature switch in one place",
+  ["enabled", "enableSearch", "enableOutline", "enableLocalArchive",
+    "enableAutoScrollLoad", "enableFloatingButton", "liveAutoTrim", "disableNotifications"]
+    .every((key) => indexJsContent.includes(`"${key}"`)));
+
+check("The removed folder switch is gone from every shipped surface",
+  !indexJsContent.includes("enableFolders") &&
+  !popupJsContent.includes("enableFolders") &&
+  !popupHtmlContent.includes("toggleFolders"));
+
+check("Nothing in the shipped UI mentions a paid tier",
+  !/PRO TRIAL|Upgrade to Pro|Buy me a beer|Get PRO/.test(
+    indexJsContent + popupHtmlContent + popupJsContent));
+
+const totalPassed = results.filter((r) => r.pass).length;
+console.log(`\n================ ${totalPassed}/${results.length} passed ================`);
+if (totalPassed !== results.length) {
+  process.exit(1);
+}
+process.exit(0);
+

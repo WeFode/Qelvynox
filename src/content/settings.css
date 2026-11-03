@@ -1,0 +1,629 @@
+/**
+ * Qelvynox - In-page settings modal (Speed Booster style, shadcn/ui design tokens)
+ *
+ * Every rule is namespaced under .qgst-root / .qgst-overlay so nothing can
+ * leak into ChatGPT's own DOM. Theme values come from CSS custom properties
+ * that flip when the root carries .qelvynox-dark (driven by the page theme).
+ */
+
+.qgst-root {
+  --qg-bg: #ffffff;
+  --qg-fg: #09090b;
+  --qg-muted: #71717a;
+  --qg-muted-bg: #f4f4f5;
+  --qg-border: #e4e4e7;
+  --qg-input-bg: #ffffff;
+  --qg-primary: #18181b;
+  --qg-primary-fg: #fafafa;
+  --qg-accent: #f4f4f5;
+  --qg-accent-fg: #18181b;
+  --qg-ring: #a1a1aa;
+  --qg-success: #16a34a;
+  --qg-success-bg: #f0fdf4;
+  --qg-success-fg: #15803d;
+  --qg-destructive: #dc2626;
+  --qg-destructive-bg: #fef2f2;
+  --qg-switch-off: #e4e4e7;
+  /* The mark's periwinkle orbit, kept to the places where the panel has to say
+     "this one is chosen" - the selected row, the selected mode, the focus
+     ring. The surfaces themselves stay neutral shadcn. */
+  --qg-brand: #4f5fd8;
+  --qg-brand-soft: rgba(79, 95, 216, 0.10);
+  --qg-brand-line: rgba(79, 95, 216, 0.42);
+  --qg-tile-bg: #131a2c;
+  --qg-tile-border: #26314c;
+  --qg-tile-fg: #eef1fa;
+  --qg-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.25);
+  --qg-radius: 12px;
+
+  position: fixed;
+  inset: 0;
+  /* Above the dock/drawer/search (10000-10003) and level with the export
+     window (20000, appended later so it wins ties); below toasts. Without
+     this the dock sits on top of the panel's close button on narrow
+     viewports and silently swallows the click. */
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", Roboto, sans-serif;
+  color: var(--qg-fg);
+  -webkit-font-smoothing: antialiased;
+}
+
+.qgst-root.qelvynox-dark {
+  --qg-bg: #212121;
+  --qg-fg: #ededed;
+  --qg-muted: #a1a1aa;
+  --qg-muted-bg: #27272a;
+  --qg-border: #3f3f46;
+  --qg-input-bg: #2f2f33;
+  --qg-primary: #fafafa;
+  --qg-primary-fg: #18181b;
+  --qg-accent: #2f2f33;
+  --qg-accent-fg: #fafafa;
+  --qg-ring: #71717a;
+  --qg-success: #4ade80;
+  --qg-success-bg: #052e16;
+  --qg-success-fg: #86efac;
+  --qg-destructive: #f87171;
+  --qg-destructive-bg: #450a0a;
+  --qg-switch-off: #3f3f46;
+  --qg-brand: #9db0ff;
+  --qg-brand-soft: rgba(157, 176, 255, 0.13);
+  --qg-brand-line: rgba(157, 176, 255, 0.45);
+  --qg-tile-bg: #1b2233;
+  --qg-tile-border: #2e3852;
+  --qg-tile-fg: #eef1fa;
+  --qg-shadow: 0 25px 60px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* ---------- Shell ---------- */
+
+.qgst-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+}
+
+.qgst-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(920px, 94vw);
+  height: min(640px, 92vh);
+  background: var(--qg-bg);
+  border: 1px solid var(--qg-border);
+  border-radius: 16px;
+  box-shadow: var(--qg-shadow);
+  overflow: hidden;
+  animation: qgstPop 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes qgstPop {
+  from { opacity: 0; transform: translateY(8px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+
+.qgst-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--qg-border);
+  flex: none;
+}
+
+.qgst-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  /* The brand tile, not a grey placeholder: this is the one place the panel
+     can show what it belongs to, and the mark is drawn light on its own navy.
+     An <img> would be blocked by ChatGPT's CSP, so the SVG ships inline. */
+  background: linear-gradient(160deg, var(--qg-tile-bg), #0a0e1a);
+  border: 1px solid var(--qg-tile-border);
+  color: var(--qg-tile-fg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  overflow: hidden;
+}
+
+.qgst-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.qgst-title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qgst-subtitle {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--qg-muted);
+}
+
+.qgst-header-spacer { flex: 1; }
+
+.qgst-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--qg-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.qgst-close:hover {
+  background: var(--qg-accent);
+  color: var(--qg-accent-fg);
+}
+
+.qgst-close:focus-visible { outline: 2px solid var(--qg-brand); outline-offset: 1px; }
+
+/* The icon must never swallow the click - the button is the target. */
+.qgst-close svg { pointer-events: none; }
+
+.qgst-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ---------- Sidebar ---------- */
+
+.qgst-sidebar {
+  width: 232px;
+  flex: none;
+  border-right: 1px solid var(--qg-border);
+  padding: 14px 10px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.qgst-nav-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--qg-muted);
+  padding: 6px 10px 8px;
+}
+
+.qgst-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--qg-fg);
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.qgst-nav-item:hover { background: var(--qg-accent); }
+
+.qgst-nav-item.qgst-active {
+  background: var(--qg-brand-soft);
+  border-color: var(--qg-brand-line);
+  font-weight: 600;
+}
+
+.qgst-nav-item svg { flex: none; color: var(--qg-muted); }
+.qgst-nav-item.qgst-active svg { color: var(--qg-brand); }
+.qgst-nav-item:focus-visible { outline: 2px solid var(--qg-brand); outline-offset: 1px; }
+.qgst-nav-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.qgst-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--qg-border);
+}
+
+.qgst-dot.on { background: var(--qg-success); box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.15); }
+
+.qgst-nav-sep { height: 1px; background: var(--qg-border); margin: 10px 6px; }
+
+.qgst-sidebar-foot {
+  margin-top: auto;
+  padding: 12px 10px 4px;
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: var(--qg-muted);
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+}
+
+.qgst-sidebar-foot svg { flex: none; margin-top: 2px; }
+
+/* ---------- Content ---------- */
+
+.qgst-content {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 20px 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.qgst-card {
+  background: var(--qg-bg);
+  border: 1px solid var(--qg-border);
+  border-radius: var(--qg-radius);
+  padding: 16px;
+}
+
+.qgst-card + .qgst-card { margin-top: 0; }
+
+.qgst-card-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.qgst-card-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  flex: none;
+  background: var(--qg-muted-bg);
+  border: 1px solid var(--qg-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--qg-fg);
+}
+
+.qgst-card-title { margin: 0; font-size: 14.5px; font-weight: 600; letter-spacing: -0.01em; }
+.qgst-card-desc { margin: 3px 0 0; font-size: 12.5px; color: var(--qg-muted); line-height: 1.6; }
+.qgst-card-head .qgst-switch-wrap { margin-left: auto; flex: none; padding-top: 8px; }
+
+.qgst-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--qg-muted);
+  margin: 6px 0 0;
+}
+
+/* Loading-mode radio cards */
+.qgst-radio-card {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 13px 14px;
+  border: 1px solid var(--qg-border);
+  border-radius: var(--qg-radius);
+  background: var(--qg-bg);
+  cursor: pointer;
+  transition: border-color 0.15s, background-color 0.15s;
+}
+
+.qgst-radio-card + .qgst-radio-card { margin-top: 8px; }
+.qgst-radio-card:hover { background: var(--qg-muted-bg); }
+
+.qgst-radio-card.qgst-active {
+  border-color: var(--qg-brand);
+  background: var(--qg-brand-soft);
+  box-shadow: 0 0 0 1px var(--qg-brand) inset;
+}
+
+.qgst-radio-card:focus-visible { outline: 2px solid var(--qg-brand); outline-offset: 2px; }
+
+.qgst-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1.5px solid var(--qg-border);
+  background: var(--qg-input-bg);
+  flex: none;
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s;
+}
+
+.qgst-radio-card.qgst-active .qgst-radio { border-color: var(--qg-brand); }
+
+.qgst-radio-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--qg-brand);
+  transform: scale(0);
+  transition: transform 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qgst-radio-card.qgst-active .qgst-radio-dot { transform: scale(1); }
+
+.qgst-radio-title { font-size: 13px; font-weight: 600; }
+.qgst-radio-desc { font-size: 12px; color: var(--qg-muted); margin-top: 2px; line-height: 1.6; }
+
+/* Current chat card */
+.qgst-chat-title {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.qgst-chat-row { display: flex; align-items: center; gap: 16px; }
+.qgst-chat-count { flex: 1; min-width: 0; }
+.qgst-chat-num { font-size: 26px; font-weight: 650; letter-spacing: -0.02em; color: var(--qg-success); }
+/* "No data yet" is not a loaded count: the green belongs to the number. */
+.qgst-chat-num-unknown { color: var(--qg-muted); font-weight: 500; }
+.qgst-chat-num-total { font-size: 13px; color: var(--qg-muted); font-weight: 500; margin-left: 4px; }
+.qgst-chat-label { font-size: 12.5px; color: var(--qg-muted); margin-left: 6px; }
+
+.qgst-progress {
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--qg-muted-bg);
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.qgst-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  background: var(--qg-success);
+  transition: width 0.3s ease;
+}
+
+/* No data yet is not "0% loaded": an empty track must not read as progress. */
+.qgst-progress-fill.qgst-progress-muted { background: var(--qg-border); }
+
+.qgst-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  border: 1px solid var(--qg-border);
+  background: var(--qg-muted-bg);
+  color: var(--qg-muted);
+  white-space: nowrap;
+}
+
+.qgst-badge.qgst-badge-success {
+  background: var(--qg-success-bg);
+  border-color: transparent;
+  color: var(--qg-success-fg);
+}
+
+/* Rows: switch + stepper */
+.qgst-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 2px;
+}
+
+.qgst-row + .qgst-row { border-top: 1px solid var(--qg-border); }
+.qgst-row-info { flex: 1; min-width: 0; }
+.qgst-row-name { font-size: 13px; font-weight: 500; }
+.qgst-row-desc { font-size: 12px; color: var(--qg-muted); margin-top: 2px; line-height: 1.6; }
+
+.qgst-switch {
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 9999px;
+  border: 1px solid transparent;
+  background: var(--qg-switch-off);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+  flex: none;
+  outline: none;
+}
+
+.qgst-switch:checked { background: var(--qg-primary); }
+
+.qgst-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.qgst-switch:checked::after { transform: translateX(18px); }
+.qgst-switch:focus-visible { box-shadow: 0 0 0 2px var(--qg-bg), 0 0 0 4px var(--qg-brand); }
+
+.qgst-switch.qgst-switch-primary:checked { background: var(--qg-brand); }
+
+.qgst-stepper {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--qg-border);
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--qg-input-bg);
+  flex: none;
+}
+
+.qgst-step-btn {
+  width: 30px;
+  height: 30px;
+  border: none;
+  background: transparent;
+  color: var(--qg-muted);
+  font-size: 15px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.qgst-step-btn:hover { background: var(--qg-accent); color: var(--qg-accent-fg); }
+.qgst-step-btn:focus-visible { outline: 2px solid var(--qg-brand); outline-offset: -2px; }
+
+.qgst-step-input {
+  width: 46px;
+  height: 30px;
+  border: none;
+  border-left: 1px solid var(--qg-border);
+  border-right: 1px solid var(--qg-border);
+  background: transparent;
+  color: var(--qg-fg);
+  font-size: 13px;
+  font-weight: 600;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  outline: none;
+}
+
+.qgst-step-input::-webkit-outer-spin-button,
+.qgst-step-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.qgst-step-input:focus-visible { box-shadow: inset 0 0 0 2px var(--qg-brand-line); }
+
+/* Buttons */
+.qgst-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 14px;
+  border-radius: 10px;
+  border: 1px solid var(--qg-border);
+  background: var(--qg-bg);
+  color: var(--qg-fg);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
+  outline: none;
+}
+
+.qgst-btn:hover { background: var(--qg-muted-bg); }
+.qgst-btn:focus-visible { box-shadow: 0 0 0 2px var(--qg-bg), 0 0 0 4px var(--qg-brand); }
+.qgst-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.qgst-btn-primary {
+  background: var(--qg-primary);
+  color: var(--qg-primary-fg);
+  border-color: var(--qg-primary);
+  font-weight: 600;
+}
+
+.qgst-btn-primary:hover { background: var(--qg-primary); opacity: 0.9; }
+
+.qgst-btn-destructive {
+  color: var(--qg-destructive);
+  border-color: var(--qg-border);
+}
+
+.qgst-btn-destructive:hover { background: var(--qg-destructive-bg); }
+
+.qgst-btn-row { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* Misc */
+.qgst-kbd {
+  display: inline-block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  padding: 1px 6px;
+  border: 1px solid var(--qg-border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--qg-muted-bg);
+  color: var(--qg-fg);
+}
+
+.qgst-meta {
+  font-size: 12.5px;
+  color: var(--qg-muted);
+  line-height: 1.8;
+}
+
+.qgst-meta strong { color: var(--qg-fg); font-weight: 600; }
+
+/* Shortcut rows: the key and its description are separated with layout, not
+   with a CJK space, so the English list is not padded by an ideographic gap. */
+.qgst-shortcut {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.qgst-shortcut strong { flex: none; min-width: 148px; }
+
+.qgst-sc-desc { color: var(--qg-muted); }
+
+.qgst-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.qgst-list li {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12.5px;
+  color: var(--qg-muted);
+  line-height: 1.7;
+}
+
+.qgst-list li svg { flex: none; margin-top: 3px; color: var(--qg-success); }
+
+.qgst-empty {
+  font-size: 12.5px;
+  color: var(--qg-muted);
+  padding: 10px 0 2px;
+}
+
+/* Motion is decoration here: the panel animates in, the switches slide, and
+   none of it carries meaning, so anyone who asked the OS to reduce it gets the
+   same layout without the travel. */
+@media (prefers-reduced-motion: reduce) {
+  .qgst-panel { animation: none; }
+  .qgst-radio-dot { transition: none; }
+  .qgst-switch { transition: none; }
+  .qgst-switch::after { transition: none; }
+  .qgst-progress-fill { transition: none; }
+}

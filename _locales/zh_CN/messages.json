@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Qelvynox - ChatGPT 加速、搜索与导出",
+    "description": "Extension name shown by Chrome and in the store listing. Max 75 characters."
+  },
+  "extDescription": {
+    "message": "免费、本地运行：加速长对话，提供对话内搜索、问题导航、回复收藏、本地归档与多格式导出。",
+    "description": "Store summary. Max 132 characters."
+  },
+  "actionTitle": {
+    "message": "Qelvynox - ChatGPT 加速、搜索与导出",
+    "description": "Tooltip for the toolbar icon."
+  }
+}

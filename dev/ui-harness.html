@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="utf-8" />
+  <title>Qelvynox UI Harness</title>
+  <link rel="stylesheet" href="/src/content/settings.css" />
+  <style>
+    /* A deliberately ChatGPT-like host: Tailwind-ish utility class names on
+       the turn nodes, so the content script's compatibility layer resolves
+       them, plus a few of ChatGPT's own resets to prove the namespaced modal
+       CSS is not being flattened by a hostile host stylesheet. */
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; height: 100%; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #ffffff;
+      color: #0d0d0d;
+    }
+    html[data-theme="dark"] body { background: #212121; color: #ececec; }
+    header {
+      display: flex; align-items: center; justify-content: flex-end;
+      height: 48px; padding: 0 12px; border-bottom: 1px solid rgba(0,0,0,.08);
+    }
+    html[data-theme="dark"] header { border-bottom-color: rgba(255,255,255,.12); }
+    header button {
+      border: 1px solid rgba(0,0,0,.12); background: transparent; color: inherit;
+      border-radius: 9999px; height: 36px; padding: 0 12px; font-size: 14px; cursor: pointer;
+    }
+    main { height: calc(100% - 48px); overflow-y: auto; padding: 24px 0 80px; }
+    .turn {
+      max-width: 680px; margin: 0 auto 18px; padding: 12px 16px;
+      border-radius: 16px; border: 1px solid rgba(0,0,0,.07);
+    }
+    html[data-theme="dark"] .turn { border-color: rgba(255,255,255,.09); }
+    .turn[data-user] { background: #f4f4f5; }
+    html[data-theme="dark"] .turn[data-user] { background: #2f2f33; }
+    .role { font-size: 11px; opacity: .6; margin-bottom: 4px; }
+    /* ChatGPT's own user bubble carries no "you" text node - the label is
+       chrome around it. Drawing it from CSS keeps the fake page honest, so the
+       navigator and the export list cannot show "你 你…". */
+    .turn[data-user] .text::before {
+      content: "你";
+      display: block;
+      font-size: 11px;
+      opacity: .6;
+      margin-bottom: 4px;
+    }
+    .text { font-size: 14px; line-height: 1.7; }
+    /* Message bodies are written as the markdown ChatGPT actually returns, so
+       the store screenshots show a real answer - and the export path gets
+       headings, lists and code to keep. */
+    .text p { margin: 6px 0; }
+    .text h4 { font-size: 14px; margin: 10px 0 6px; }
+    .text ul { margin: 6px 0 6px 20px; }
+    .text li { margin: 3px 0; }
+    .text code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12.5px; }
+    .text pre {
+      margin: 8px 0; padding: 10px 12px; overflow-x: auto;
+      background: #f6f7f8; border: 1px solid rgba(0,0,0,.08); border-radius: 10px;
+    }
+    .text pre code { font-size: 12.5px; line-height: 1.6; white-space: pre; }
+    html[data-theme="dark"] .text pre { background: #1b1b1f; border-color: rgba(255,255,255,.1); }
+    #hint { position: fixed; left: 12px; bottom: 10px; font-size: 11px; opacity: .55; }
+  </style>
+</head>
+<body>
+  <header>
+    <button type="button" data-testid="share-chat-button">分享</button>
+  </header>
+  <main id="scroll-container"></main>
+  <div id="hint">harness: 仅用于验证扩展页内 UI，非 ChatGPT 本体；访问 /c/demo-chat 可额外验证本地归档与收藏</div>
+
+  <script>
+    // ---- Fake ChatGPT conversation (the selectors the extension targets) ----
+    // Written to look like a real thread, because these frames are also the
+    // store screenshots: a navigator row that says "第 3 条回复" three times
+    // tells a user nothing about what the extension does.
+    const prompts = [
+      "Chrome 扩展在长对话里卡顿，一般是什么原因？",
+      "MutationObserver 为什么会把自己的 DOM 写入也算成变化？",
+      "能给一段去抖的写法吗？",
+      "这个方案会影响 React 的重渲染吗？",
+      "目录面板应该显示轮次编号吗？",
+      "搜索高亮可以直接改 innerHTML 吗？",
+      "深色模式下对比度怎么验收？",
+      "导出成 Markdown 时代码块会丢格式吗？",
+      "深浅两套主题都要截图验收吗？",
+      "最终结论：先统一设计系统，再做对话导航。"
+    ];
+    const replies = [
+      '<p><strong>三个常见原因</strong></p><ul><li>一次渲染整段历史：几百个 turn 各自带代码块与图片，布局成本是 O(n)</li><li>滚动与输入事件里读 <code>innerText</code>，强制同步重排</li><li>定时器轮询 DOM，页面永远无法空闲</li></ul><p>先量一次火焰图，再决定砍哪一层。</p>',
+      "因为 Observer 看的是 DOM 本身，它不认识写入者。<b>解法</b>：给自己创建的每个节点打一个属性，回调里先过滤掉目标或新增节点带这个属性的记录，这样页面在两次用户操作之间真的能闲下来。",
+      '<pre><code class="language-js">let timer = null;\nconst mo = new MutationObserver((records) =&gt; {\n  if (timer) return;\n  if (!records.some(isForeign)) return;\n  timer = setTimeout(tick, 350);\n});</code></pre><p>关键是“已排队就丢弃后续批次”，而不是重新计时。</p>',
+      "不会，只要你不动它管理的节点。<b>隐藏</b>包裹层、保留 React 持有的 turn 本身，fiber 树里的兄弟引用就还成立；直接 remove 就会在下次 commit 抛 NotFoundError。",
+      "不建议。编号会被读成“额度/用量”之类的计量信号，而它只是屏幕上有几条消息。<b>更该显示</b>的是当前视口读到哪一条，以及还有多少被折叠了。",
+      "不要改。用 <b>Custom Highlight API</b> 给文本区间上色：不碰宿主 DOM，React 重渲染也不会把你的标记吃掉；不支持的浏览器退化成跳转 + 脉冲描边。",
+      '<ul><li>正文对比度 ≥ 4.5:1，图标与边框 ≥ 3:1</li><li>不要只靠颜色区分状态，同时给形状或文字</li><li>focus ring 在两种底色上都要看得见</li></ul><p>验收时两套主题各截一遍，只看编译通过不算。</p>',
+      "不会，前提是抽取时走 DOM 而不是 <code>innerText</code>：按块遍历，<code>pre</code> 保留语言标记，表格转成 Markdown 表格，链接保留 href。",
+      "要。而且要在真实页面上看：面板跟随页面主题，不是跟随系统主题，两者可以不一致。",
+      '<p>先定设计系统（token、圆角、边框、层级），再做具体面板。顺序反过来，每个面板都会长成自己的样子。</p>'
+    ];
+    const main = document.getElementById("scroll-container");
+    prompts.forEach((p, i) => {
+      const u = document.createElement("div");
+      u.className = "turn relative shrink-0";
+      u.setAttribute("data-turn-key", "t" + i + "-user");
+      u.setAttribute("data-message-id", "msg-user-" + i);
+      u.setAttribute("data-user", "true");
+      u.setAttribute("data-user-message-bubble", "true");
+      u.innerHTML = '<div class="text">' + p + "</div>";
+      const a = document.createElement("div");
+      a.className = "turn relative shrink-0";
+      a.setAttribute("data-turn-key", "t" + i + "-asst");
+      // A real message id, so bookmarks stored from this page can be jumped to
+      // (and deleted) exactly like on chatgpt.com.
+      a.setAttribute("data-message-id", "msg-asst-" + i);
+      a.innerHTML =
+        '<div class="role">ChatGPT</div><div class="text" data-markdown-text-style="assistant-message">' +
+        replies[i] + "</div>";
+      main.append(u, a);
+    });
+
+    // ---- Demo data for the surfaces that read stored state ----
+    // Called from the screenshot script, not on load: a harness that silently
+    // rewrites storage every visit makes a real bug impossible to reproduce.
+    window.__harnessSeedDemoData = () => {
+      const cid = (location.pathname.match(/\/c\/([^/]+)/) || [])[1];
+      if (!cid) return "no conversation id in the path - open /c/demo-chat";
+      const at = (days) => Date.now() - days * 86400000;
+      localStorage.setItem("qelvynox_bookmarks_" + cid, JSON.stringify([
+        { id: "msg-asst-2", snippet: "let timer = null; const mo = new MutationObserver((records) => { ... })", timestamp: at(1) },
+        { id: "msg-asst-5", snippet: "用 Custom Highlight API 给文本区间上色：不碰宿主 DOM", timestamp: at(3) },
+        { id: "msg-asst-6", snippet: "正文对比度 ≥ 4.5:1，图标与边框 ≥ 3:1", timestamp: at(9) }
+      ]));
+      return "seeded";
+    };
+
+    // ---- Split view: a second conversation beside the first ----
+    // ChatGPT can keep another conversation mounted (compare / split view), and
+    // that is exactly the shape where a document-wide turn query reads two chats
+    // as one: the navigator stacks up and the limiter folds the wrong pane.
+    // Reproduce it here instead of waiting for it to happen by accident.
+    window.__harnessSplitView = () => {
+      if (document.getElementById("harness-pane-b")) return "already split";
+      const row = document.createElement("div");
+      row.id = "harness-split-row";
+      row.style.cssText = "display:flex;gap:12px;align-items:flex-start;width:100%";
+      const paneA = document.createElement("div");
+      paneA.id = "harness-pane-a";
+      paneA.className = "thread-scroll-container";
+      paneA.style.cssText = "flex:1 1 50%;padding:8px;border:1px dashed rgba(127,127,127,.5)";
+      while (main.firstChild) paneA.appendChild(main.firstChild);
+      const paneB = document.createElement("div");
+      paneB.id = "harness-pane-b";
+      paneB.className = "thread-scroll-container";
+      paneB.style.cssText = "flex:1 1 50%;padding:8px;border:1px dashed rgba(127,127,127,.5)";
+      ["另一个对话的第一问", "另一个对话的第二问", "另一个对话的第三问"].forEach((q, i) => {
+        const u = document.createElement("div");
+        u.className = "turn relative shrink-0";
+        u.setAttribute("data-turn-key", "other-" + i);
+        u.setAttribute("data-message-id", "other-msg-" + i);
+        u.setAttribute("data-user", "true");
+        u.setAttribute("data-user-message-bubble", "true");
+        u.innerHTML = '<div class="text">' + q + "</div>";
+        const a = document.createElement("div");
+        a.className = "turn relative shrink-0";
+        a.setAttribute("data-turn-key", "other-" + i + "-asst");
+        a.innerHTML = '<div class="role">ChatGPT</div><div class="text" data-markdown-text-style="assistant-message">这是另一个对话的回答。</div>';
+        paneB.append(u, a);
+      });
+      row.append(paneA, paneB);
+      main.appendChild(row);
+      return "split";
+    };
+
+    // Which pane the reader is looking at: the other one is collapsed the way
+    // ChatGPT leaves a mounted-but-hidden conversation.
+    window.__harnessFocusPane = (which) => {
+      const a = document.getElementById("harness-pane-a");
+      const b = document.getElementById("harness-pane-b");
+      if (!a || !b) return "not split";
+      const show = (el) => { el.style.display = ""; el.style.flex = "1 1 50%"; };
+      const hide = (el) => { el.style.display = "none"; };
+      if (which === "b") { hide(a); show(b); b.style.flex = "1 1 100%"; } else { hide(b); show(a); a.style.flex = "1 1 100%"; }
+      return "focused " + which;
+    };
+
+    // ---- chrome.* stub: the minimum the content script touches ----
+    // Seeded BEFORE the content script runs, so loadSettings() reads a real
+    // stored object exactly like the extension does on chatgpt.com.
+    // The stub itself only lives in memory, so the settings are mirrored into
+    // localStorage: without that, every reload dropped the stored language and
+    // any other switch, which made "does it persist?" impossible to check here.
+    const SETTINGS_MIRROR_KEY = "harness_qelvynox_settings";
+    const seedSettings = () => {
+      const defaults = {
+        language: "zh-CN",
+        enabled: true,
+        messageLimit: 12,
+        loadBatchSize: 5,
+        continuationTurns: 10,
+        enableAutoScrollLoad: true,
+        enableFloatingButton: true,
+        enableOutline: true,
+        enableSearch: true,
+        enableLocalArchive: true,
+        liveAutoTrim: false,
+        disableNotifications: false
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem(SETTINGS_MIRROR_KEY) || "null");
+        return saved && typeof saved === "object" ? { ...defaults, ...saved } : defaults;
+      } catch {
+        return defaults;
+      }
+    };
+    const storageData = { qelvynox_settings: seedSettings() };
+    const runtimeMessageListeners = [];
+    const storageChangeListeners = [];
+    window.chrome = {
+      runtime: {
+        id: "harness",
+        getURL: (p) => "/" + p,
+        getManifest: () => ({ version: "1.0.0" }),
+        onMessage: { addListener: (fn) => runtimeMessageListeners.push(fn) },
+        sendMessage: () => Promise.resolve({}),
+        lastError: null
+      },
+      storage: {
+        local: {
+          // Real chrome calls the callback for BOTH (key, cb) and
+          // ({defaults}, cb); a harness that skips one silently leaves the
+          // extension running on its own defaults.
+          get: (key, cb) => {
+            const out = {};
+            if (typeof key === "string") {
+              if (storageData[key] !== undefined) out[key] = storageData[key];
+            } else if (Array.isArray(key)) {
+              key.forEach((k) => { if (storageData[k] !== undefined) out[k] = storageData[k]; });
+            } else {
+              Object.assign(out, key || {});
+              Object.keys(out).forEach((k) => {
+                if (storageData[k] !== undefined) out[k] = storageData[k];
+              });
+            }
+            if (typeof cb === "function") cb(out);
+            return Promise.resolve(out);
+          },
+          set: (obj, cb) => {
+            Object.assign(storageData, obj);
+            try {
+              if (obj.qelvynox_settings) localStorage.setItem(SETTINGS_MIRROR_KEY, JSON.stringify(obj.qelvynox_settings));
+            } catch {}
+            storageChangeListeners.forEach((fn) => {
+              const changes = {};
+              Object.keys(obj).forEach((k) => { changes[k] = { newValue: obj[k] }; });
+              fn(changes, "local");
+            });
+            if (typeof cb === "function") cb();
+            return Promise.resolve();
+          },
+          remove: (k, cb) => { delete storageData[k]; if (cb) cb(); return Promise.resolve(); },
+          getKeys: () => Promise.resolve(Object.keys(storageData))
+        },
+        onChanged: { addListener: (fn) => storageChangeListeners.push(fn) }
+      },
+      tabs: { query: (q, cb) => cb && cb([]), sendMessage: () => {} }
+    };
+    window.__harnessStorage = () => storageData;
+    // Drive the extension through its own real entry points instead of
+    // poking at its internals: a settings write goes through storage, a
+    // re-render goes through the runtime message channel.
+    window.__harnessSetSettings = (patch) => {
+      chrome.storage.local.set({ qelvynox_settings: Object.assign({}, storageData.qelvynox_settings, patch) });
+    };
+    window.__harnessSend = (message) => {
+      const replies = [];
+      runtimeMessageListeners.forEach((fn) => {
+        replies.push(fn(message, {}, (r) => replies.push(r)));
+      });
+      return replies;
+    };
+    window.__harnessTheme = (mode) => {
+      document.documentElement.setAttribute("data-theme", mode);
+    };
+
+    // ---- Screenshot mode ----
+    // ?shot=navigator&theme=dark opens exactly one surface and nothing else, so
+    // a headless browser can capture it at an exact viewport size with no human
+    // in the loop. Every shot goes through a real click on the real dock button:
+    // a panel that only appears when the harness pokes the extension's internals
+    // would not prove the shipped UI works.
+    const SHOTS = {
+      navigator: () => document.getElementById("qelvynox-dock-outline").click(),
+      bookmarks: () => document.getElementById("qelvynox-dock-bookmarks").click(),
+      export: () => document.getElementById("qelvynox-dock-export").click(),
+      settings: () => document.getElementById("qelvynox-dock-settings").click(),
+      search: () => {
+        window.dispatchEvent(new KeyboardEvent("keydown", { key: "f", altKey: true, bubbles: true }));
+        const input = document.getElementById("qelvynox-search-input");
+        if (!input) return;
+        input.value = params.get("q") || "Highlight";
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    };
+    const params = new URLSearchParams(location.search);
+    const shotName = params.get("shot");
+    if (shotName) {
+      const hint = document.getElementById("hint");
+      if (hint) hint.remove();
+      // A still cannot show an entrance, and a headless capture that lands 40 ms
+      // into a 180 ms fade produces a half-transparent panel. The settled state
+      // is what the listing needs, so the entry animations are switched off for
+      // shot mode only - the live harness still plays them.
+      const calm = document.createElement("style");
+      calm.textContent = "[data-qelvynox], [data-qelvynox] *, [data-qelvynox] *::before, [data-qelvynox] *::after { animation: none !important; transition: none !important; }";
+      document.head.appendChild(calm);
+      // The export window and the settings panel both headline the chat title,
+      // so a screenshot of them needs a title a person would recognise.
+      document.title = "Chrome 扩展长对话卡顿的排查与优化 - ChatGPT";
+      setTimeout(() => {
+        window.__harnessSeedDemoData();
+        // The harness has no mainWorld interceptor, so the content script would
+        // never hear a total. Broadcasting one the way the real page does fills
+        // the "current chat" card - and exercises the status plumbing the
+        // popup depends on, rather than screenshotting an empty state.
+        window.postMessage({
+          type: "qelvynox-status",
+          payload: {
+            conversationId: (location.pathname.match(/\/c\/([^/]+)/) || [])[1] || null,
+            url: location.href,
+            totalMessages: 20,
+            renderedMessages: 20,
+            hasOlderMessages: false,
+            visibleTurns: 10,
+            totalTurns: 10,
+            countState: "complete",
+            countComplete: true,
+            reachedConversationStart: true,
+            serverHasOlder: false,
+            hydratedPages: 0
+          }
+        }, "*");
+        if (params.get("theme")) window.__harnessTheme(params.get("theme"));
+        // One observer tick with the page theme already settled, then open the
+        // surface - the order a person arrives at it in.
+        setTimeout(() => { try { SHOTS[shotName](); } catch {} }, 500);
+      }, 700);
+    }
+  </script>
+  <script src="/src/shared/i18n.js"></script>
+  <script src="/src/content/archive.js"></script>
+  <script src="/src/content/index.js"></script>
+</body>
+</html>

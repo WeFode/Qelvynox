@@ -1,0 +1,10 @@
+# The extension ships as plain text that is read on Windows, macOS and Linux, so the
+# repository stores LF and each checkout decides what it needs. This keeps `node
+# dev/package.mjs` byte-stable and stops the whole diff from turning red on a clone.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+
+# Windows-only helper scripts are easier to run straight from Explorer with CRLF.
+*.ps1 text eol=crlf

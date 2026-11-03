@@ -1,0 +1,14 @@
+{
+  "extName": {
+    "message": "Qelvynox - ChatGPT Speed, Search & Export",
+    "description": "Extension name shown by Chrome and in the store listing. Max 75 characters."
+  },
+  "extDescription": {
+    "message": "Free and local: speeds up long chats, searches in place, navigates by question, saves replies and exports with images.",
+    "description": "Store summary. Max 132 characters."
+  },
+  "actionTitle": {
+    "message": "Qelvynox - ChatGPT Speed, Search & Export",
+    "description": "Tooltip for the toolbar icon."
+  }
+}

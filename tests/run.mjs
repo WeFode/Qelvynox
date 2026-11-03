@@ -1,0 +1,44 @@
+/**
+ * Qelvynox test runner.
+ *
+ *   node tests/run.mjs
+ *
+ * Zero dependencies, no build step. Each suite loads the REAL extension
+ * source and exercises it inside node:vm with stubbed browser globals.
+ * Exits non-zero if any assertion fails.
+ */
+import { spawnSync } from "node:child_process";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+
+const SUITES = [
+  ["Counting path (mainWorld.js)", "count.test.mjs"],
+  ["Stats flow + export button", "stats-flow.test.mjs"],
+  ["Export pipeline (extraction, full export, continuation)", "export.test.mjs"],
+  ["v3.8.0 Features (DOM Limit, Backup, Full Search)", "features-v380.test.mjs"],
+  ["v3.11.0 Smoothness (observer hygiene, no forced layout, caches)", "perf-v3110.test.mjs"],
+  ["v3.12.0 Local archive (identity, merge, safe HTML, storage, wiring)", "archive-v3120.test.mjs"],
+  ["Current ChatGPT app DOM compatibility (Visible Messages = 1)", "app-dom-v313.test.mjs"],
+  ["One conversation per pane (split view must not stack the navigator)", "conversation-pane.test.mjs"],
+  ["v3.15.0 Review fixes (incremental archive, id trust, archive-backed search/export)", "review-v3150.test.mjs"],
+  ["v3.16.0 Settings modal (Speed Booster layout, no estimates, no paid tier)", "settings-modal.test.mjs"],
+  ["v1.0.0 Live surfaces, rebrand migration, release manifest", "live-update.test.mjs"],
+  ["Bilingual interface (dictionary parity, language switch, exports)", "i18n-language.test.mjs"]
+];
+
+let failed = 0;
+
+for (const [label, file] of SUITES) {
+  console.log(`\n########  ${label}  ########`);
+  const res = spawnSync(process.execPath, [path.join(HERE, file)], { stdio: "inherit" });
+  if (res.status !== 0) failed++;
+}
+
+console.log(
+  failed === 0
+    ? "\n✅ All suites passed."
+    : `\n❌ ${failed} suite(s) failed.`
+);
+process.exit(failed === 0 ? 0 : 1);

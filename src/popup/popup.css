@@ -1,0 +1,560 @@
+/* =========================================================
+   Qelvynox - Popup launcher (shadcn/ui neutral tokens)
+   The full control panel is the in-page modal; this popup only
+   launches it and exposes the most-used quick switches.
+   ========================================================= */
+
+:root {
+  color-scheme: light dark;
+  --background: #ffffff;
+  --foreground: #09090b;
+  --muted: #f4f4f5;
+  --muted-foreground: #71717a;
+  --border: #e4e4e7;
+  --input: #ffffff;
+  --primary: #18181b;
+  --primary-foreground: #fafafa;
+  --accent: #f4f4f5;
+  --accent-foreground: #18181b;
+  --ring: #a1a1aa;
+  --success: #16a34a;
+  --warning: #d97706;
+  --brand: #4f5fd8;
+  --brand-tile: #131a2c;
+  --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --radius: 12px;
+  --radius-md: 10px;
+  --radius-full: 9999px;
+  --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* The popup has no page theme to follow, so it follows the browser's. Without
+   this a dark-themed ChatGPT gets a bright white rectangle every time the icon
+   is clicked - the same disagreement the in-page surfaces solved with a class,
+   here solved with the one media query that is actually authoritative. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #212121;
+    --foreground: #ededed;
+    --muted: #27272a;
+    --muted-foreground: #a1a1aa;
+    --border: #3f3f46;
+    --input: #2f2f33;
+    --primary: #fafafa;
+    --primary-foreground: #18181b;
+    --accent: #2f2f33;
+    --accent-foreground: #fafafa;
+    --ring: #71717a;
+    --success: #4ade80;
+    --warning: #fbbf24;
+    --brand: #9db0ff;
+    --brand-tile: #1b2233;
+    --card-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  width: 360px;
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-family);
+  font-size: 13px;
+  line-height: 1.45;
+  overflow-x: hidden;
+  user-select: none;
+}
+
+.app-container {
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  background: var(--background);
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.logo-wrapper {
+  position: relative;
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--brand-tile);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  flex: none;
+}
+
+.brand-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.brand-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.brand-title {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.brand-subtitle {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
+
+.version-tag {
+  font-size: 10.5px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+}
+
+.app-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ---------- Launcher button ---------- */
+
+/* Three classes because .btn (later in this file) sets the default size;
+   the launcher button must win on specificity, not on source order. */
+.btn.btn-primary.open-settings-btn {
+  width: 100%;
+  height: 38px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+
+.launcher-hint {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  /* Negative top margin only tightens the gap created by .app-container's
+     12px column gap; anything larger pulls the line under the button. */
+  margin: -4px 2px 0;
+  line-height: 1.5;
+}
+
+.launcher-hint.hint-warn {
+  color: var(--warning);
+}
+
+/* ---------- Interface language ---------- */
+
+.lang-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 0 2px;
+}
+
+.lang-label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+}
+
+.lang-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  background: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+}
+
+.lang-opt {
+  font: inherit;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--muted-foreground);
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  padding: 3px 12px;
+  cursor: pointer;
+}
+
+.lang-opt.active {
+  color: var(--accent-foreground);
+  background: var(--background);
+  box-shadow: var(--card-shadow);
+}
+
+.lang-opt:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+/* ---------- Cards ---------- */
+
+.card {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  box-shadow: var(--card-shadow);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.card-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.icon-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  border: 1px solid var(--border);
+  color: var(--foreground);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+}
+
+.card-title {
+  font-size: 13.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.card-subtitle {
+  font-size: 11.5px;
+  color: var(--muted-foreground);
+  margin-top: 1px;
+}
+
+/* ---------- Stepper (显示轮次) ---------- */
+
+.limit-controller {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.limit-primary-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.limit-secondary-label {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+}
+
+.stepper-widget {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--input);
+  flex: none;
+}
+
+.step-btn {
+  width: 28px;
+  height: 28px;
+  border: none;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.step-btn:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.step-btn:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: -2px;
+}
+
+.step-input {
+  width: 42px;
+  height: 28px;
+  border: none;
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  background: transparent;
+  color: var(--foreground);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: center;
+  -moz-appearance: textfield;
+  appearance: textfield;
+  outline: none;
+}
+
+.step-input::-webkit-outer-spin-button,
+.step-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+/* ---------- Quick toggle rows ---------- */
+
+.tools-toggle-list {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+}
+
+.tool-toggle-row + .tool-toggle-row {
+  border-top: 1px solid var(--border);
+}
+
+.tool-info {
+  min-width: 0;
+}
+
+.tool-name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.tool-desc {
+  display: block;
+  font-size: 11px;
+  color: var(--muted-foreground);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+/* ---------- Switch ---------- */
+
+.custom-switch {
+  position: relative;
+  display: inline-block;
+  width: 38px;
+  height: 21px;
+  flex: none;
+}
+
+.custom-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--border);
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  transition: background-color 0.18s ease;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 17px;
+  height: 17px;
+  background: #ffffff;
+  border-radius: 50%;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.custom-switch input:checked + .switch-slider {
+  background: var(--primary);
+}
+
+.custom-switch input:checked + .switch-slider::before {
+  transform: translateX(17px);
+}
+
+.custom-switch input:focus-visible + .switch-slider {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--brand);
+}
+
+.micro-switch {
+  width: 34px;
+  height: 19px;
+}
+
+.micro-switch .switch-slider::before {
+  width: 15px;
+  height: 15px;
+}
+
+.micro-switch input:checked + .switch-slider::before {
+  transform: translateX(15px);
+}
+
+/* ---------- Buttons ---------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--background);
+  color: var(--foreground);
+  font-family: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 0.15s, border-color 0.15s, opacity 0.15s;
+  outline: none;
+}
+
+.btn:hover {
+  background: var(--muted);
+}
+
+.btn:focus-visible {
+  box-shadow: 0 0 0 2px var(--background), 0 0 0 4px var(--brand);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: var(--primary-foreground);
+  border-color: var(--primary);
+}
+
+.btn-primary:hover {
+  background: var(--primary);
+  opacity: 0.9;
+}
+
+.btn-secondary {
+  background: var(--background);
+}
+
+.export-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* ---------- Footer ---------- */
+
+.app-footer {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  padding: 2px 4px 4px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted-foreground);
+}
+
+.app-footer svg {
+  flex: none;
+  margin-top: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .switch-slider,
+  .switch-slider::before,
+  .btn,
+  .step-btn,
+  .save-bar-container { transition: none; }
+}
+
+/* ---------- Save banner ---------- */
+
+.save-bar-container {
+  position: sticky;
+  bottom: 0;
+  padding-top: 4px;
+  display: flex;
+  justify-content: flex-end;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.save-bar-container.hidden {
+  display: none;
+}
+
+.btn-save {
+  background: var(--success);
+  color: #ffffff;
+  border-color: var(--success);
+  font-weight: 600;
+  height: 34px;
+}
+
+.btn-save:hover {
+  background: var(--success);
+  opacity: 0.92;
+}
