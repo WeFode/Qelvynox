@@ -1,5 +1,5 @@
 <p align="center">
-  <a href="assets/qelvynox-poster-en.png"><img src="assets/qelvynox-poster-en.png" alt="Qelvynox — your GPT super workspace" width="1000" /></a>
+  <a href="assets/qelvynox-poster-en.jpg"><img src="assets/qelvynox-poster-en.jpg" alt="Qelvynox — your GPT super workspace" width="1000" /></a>
 </p>
 
 <h1 align="center">Qelvynox — ChatGPT speed, search &amp; export</h1>
